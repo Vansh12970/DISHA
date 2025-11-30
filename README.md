@@ -83,6 +83,5 @@ DISHA is more than just a disaster management tool; it is a lifeline for communi
 
 ## Screenshots
 ![Home Page](assets/home.png)
-![Login Page](assets/login.png)
 ![Dashboard](assets/dashboard.png)
-
+![Alert Page](assets/alert.png)
