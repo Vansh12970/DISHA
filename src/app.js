@@ -19,6 +19,10 @@ app.use(express.urlencoded({extended: true, limit: "20mb"}))
 app.use(express.static("public"))
 app.use(cookieParser())
 
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "Backend running" });
+});
+
 
 //routes import
 import userRouter from "./routes/user.routes.js"
