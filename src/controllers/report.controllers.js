@@ -84,7 +84,7 @@ Date: ${new Date().toLocaleDateString()}
     }
 }
 
-async function getPincodeFromCoordinates(lat, lon) {
+/*async function getPincodeFromCoordinates(lat, lon) {
     try {
         const response = await fetch(
             `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${apiKey}`
@@ -172,31 +172,33 @@ async function sendDisasterAlert(pincode, disasterMessage) {
     } catch (error) {
         console.error('Error sending disaster alerts:', error);
     }
-}
+}*/
 
 // upload the report
 const sendVideoReport = asyncHandler(async (req, res) => {
-    const {title, description, location} = req.body;
+    const { title, description, location } = req.body;
 
     const parsedLocation = JSON.parse(location);
-    console.log(typeof location)
-    console.log(req.body)
 
-    if(!(title.trim() && description.trim())) {
-        throw new ApiError(400, "Report title and description is required!");
+    if (!(title.trim() && description.trim())) {
+        throw new ApiError(400, "Report title and description are required!");
     }
 
-    const videoLocalPath = req.files?.videoFile[0]?.path;
-    if(!videoLocalPath) {
-        throw new ApiError(400, "Video File is Required");
+    // Get video buffer (memoryStorage)
+    const videoBuffer = req.files?.videoFile?.[0]?.buffer;
+
+    if (!videoBuffer) {
+        throw new ApiError(400, "Video file is required");
     }
 
-    const video = await uploadOnCloudinary(videoLocalPath);
+    // Upload video to Cloudinary
+    const video = await uploadOnCloudinary(videoBuffer);
 
-    if(!video) {
-        throw new ApiError(400, "Video uploading failed");
+    if (!video) {
+        throw new ApiError(500, "Video upload failed");
     }
 
+    // Store report in database
     const videoUpload = await Report.create({
         videoFile: video.url,
         title,
@@ -205,30 +207,32 @@ const sendVideoReport = asyncHandler(async (req, res) => {
         owner: req.user?._id,
     });
 
-    if(!videoUpload) {
+    if (!videoUpload) {
         throw new ApiError(500, "Failed to upload the video");
     }
 
-    const disasterPincode = await getPincodeFromCoordinates(parsedLocation.lat, parsedLocation.lon);
-    if(!disasterPincode) {
-        console.error("Failed to fetch disaster location pincode");
-        return;
-    }
-    
-            // Gemini verification before sending alert
-const isRealDisaster = await verifyDisasterWithGemini(title, description, parsedLocation, video.url);
+    // Gemini verification only (REAL / FAKE)
+    const isRealDisaster = await verifyDisasterWithGemini(
+        title,
+        description,
+        parsedLocation,
+        video.url
+    );
 
-if (isRealDisaster) {
-    const disasterMessage = `🚨 URGENT: Disaster Alert in your area \n\n⚠️ Stay indoor if possible and avoid risky areas.\n\n Your safety is our priority 🤝. Stay safe, stay strong!`;
-    await sendDisasterAlert(disasterPincode, disasterMessage);
-} else {
-    console.log("🚫 Fake Alert: Disaster is not verified by Gemini. No SMS will be sent.");
-}
-
-    return res
-    .status(200)
-    .json(new ApiResponse(200, videoUpload, "Video Uploaded Successfully and alert send"));
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {
+                report: videoUpload,
+                verified: isRealDisaster,
+            },
+            isRealDisaster
+                ? "Video uploaded. Gemini verified this report as REAL."
+                : "Video uploaded. Gemini marked this report as POSSIBLY FAKE."
+        )
+    );
 });
+
 
 // update the report controller
 const updateVideo = asyncHandler(async(req, res) => {

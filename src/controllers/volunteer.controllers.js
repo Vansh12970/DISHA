@@ -28,18 +28,22 @@ const applyAsVolunteer = asyncHandler(async(req, res) => {
         throw new ApiError(400, "All field are required")
     }
 
-    const avatarLocalPath = req.files?.avatar[0]?.path;
-    console.log(req.files)
-    
-    if(!avatarLocalPath) {
-        throw new ApiError(400, "Image file is required")
-    }
+console.log("FILES RECEIVED >>>", req.files);
+console.log("BODY RECEIVED >>>", req.body);
 
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
+const avatarBuffer = req.files?.avatar?.[0]?.buffer;
 
-    if(!avatar) {
-        throw new ApiError(400, "Image Uploading failed")
-    }
+if (!avatarBuffer) {
+  throw new ApiError(400, "Image file is required");
+}
+
+// send buffer to cloudinary
+const avatar = await uploadOnCloudinary(avatarBuffer);
+
+if (!avatar) {
+  throw new ApiError(500, "Image Uploading failed");
+}
+
 
 // Import details of user from user schema
     let finalAddress = address;

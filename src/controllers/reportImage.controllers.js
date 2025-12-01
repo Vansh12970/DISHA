@@ -83,7 +83,7 @@ Date: ${new Date().toLocaleDateString()}
     }
 }
 
-async function getPincodeFromCoordinates(lat, lon) {
+/*async function getPincodeFromCoordinates(lat, lon) {
     try {
         const response = await fetch(
             `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lon}&key=${apiKey}`
@@ -171,7 +171,7 @@ async function sendDisasterAlert(pincode, disasterMessage) {
     } catch (error) {
         console.error('Error sending disaster alerts:', error);
     }
-}
+}*/
 
 // upload the report - image
 const sendImageReport = asyncHandler(async(req, res) => {
@@ -186,16 +186,17 @@ console.log(req.body)
         throw new ApiError(400, "Report title and description is required");
     }
     
-    const imageLocalPath = req.files?.imageFile[0]?.path;
-    if(!imageLocalPath) {
-        throw new ApiError(400, "Image file is required");
-    }
+    const imageBuffer = req.files?.imageFile?.[0]?.buffer;
 
-    const image = await uploadOnCloudinary(imageLocalPath)
+if (!imageBuffer) {
+    throw new ApiError(400, "Image file is required");
+}
 
-    if(!image) {
-        throw new ApiError(400, "Image Uploading failed")
-    }
+const image = await uploadOnCloudinary(imageBuffer);
+
+if (!image) {
+    throw new ApiError(500, "Image upload failed");
+}
 
     const imageUpload = await reportImage.create({
         imageFile: image.url,
@@ -209,11 +210,11 @@ console.log(req.body)
         throw new ApiError(500, "Failed to upload the image");
     }
 
-    const disasterPincode = await getPincodeFromCoordinates(parsedLocation.lat, parsedLocation.lon);
+    /*const disasterPincode = await getPincodeFromCoordinates(parsedLocation.lat, parsedLocation.lon);
         if(!disasterPincode) {
             console.error("Failed to fetch disaster location pincode");
             return;
-        }
+        }*/
 
         // Gemini verification before sending alert
 const isRealDisaster = await verifyDisasterWithGemini(title, description, parsedLocation, image.url);
@@ -245,26 +246,34 @@ const updateImage = asyncHandler(async(req, res) => {
         throw new ApiError(400, "Unauthorized: You are not authorized to make changes")
     };
     
-    const imageLocalPath = req.file?.path;
-    const newImage = await uploadOnCloudinary(imageLocalPath);
+    const imageBuffer = req.file?.buffer;
+
+if (imageBuffer) {
+    const newImage = await uploadOnCloudinary(imageBuffer);
+
+    if (!newImage) {
+        throw new ApiError(500, "Image upload failed");
+    }
+
+    updateFields.imageFile = newImage.url;
+}
+
 
     if(!newImage) {
         throw new ApiError(500, "Image upload on cloudinary failed")
     }
 
+    let updateFields = {
+    title,
+    description,
+};
+
     //Update image details in database
     const imageUpdate = await reportImage.findByIdAndUpdate(imageId,
-        {
-            $set: {
-                title: title,
-                description: description,
-                imageFile: newImage.url,
-            }
-        },
-        {
-            new : true
-        }
-    );
+    { $set: updateFields },
+    { new: true }
+);
+
 
     if(!imageUpdate) {
         throw new ApiError(500, "Failed to update details")

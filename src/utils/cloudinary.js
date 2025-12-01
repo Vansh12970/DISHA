@@ -1,71 +1,74 @@
-import {v2 as cloudinary} from "cloudinary"
-import fs from "fs"
+import { v2 as cloudinary } from "cloudinary";
 
-
-// Configurations of cloudinary
+// Cloudinary configuration
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const uploadOnCloudinary = async (localFilePath) => {
+// Upload using buffer (for multer.memoryStorage)
+export const uploadOnCloudinary = async (fileBuffer) => {
     try {
-        if (!localFilePath) return null
-        //upload file on cloudinary
-        const response = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: "auto"
-        })
-        //file has been uploaded successfully
-        //console.log("File is uploaded on cloudinary",
-        //response.url);
-        fs.unlinkSync(localFilePath)
-        return response;
-        
-    } catch(error) {
-        fs.unlinkSync(localFilePath)
-        //remove the locally saves temporary file asupload operation failed
+        if (!fileBuffer) return null;
+
+        const result = await new Promise((resolve, reject) => {
+            const uploadStream = cloudinary.uploader.upload_stream(
+                {
+                    resource_type: "auto",
+                    folder: "volunteers"     // optional: organize uploads
+                },
+                (error, result) => {
+                    if (error) {
+                        console.error("Cloudinary Upload Error:", error);
+                        return reject(error);
+                    }
+                    resolve(result);
+                }
+            );
+
+            uploadStream.end(fileBuffer); // upload file buffer to Cloudinary
+        });
+
+        return result;
+
+    } catch (error) {
+        console.error("Cloudinary upload_stream failed:", error.message);
         return null;
     }
-}
+};
 
-const deleteResourceOnCloudinary = async(url) => {
-   try {
-     if(!url) {
-        throw new Error("URL is required");
-     }
 
-     //extract the public Id and file extension
-     const parts = url.split("/")
-     const fileNameWithExtension = parts.pop();
-     const [publicId, extension] = fileNameWithExtension.split(".")
+// Delete resource from Cloudinary
+export const deleteResourceOnCloudinary = async (url) => {
+    try {
+        if (!url) throw new Error("URL is required");
 
-     //determine the resource type based on extension
-     let type = "image";
-     if(["mp4", "mov", "avi"].includes(extension)) {
-        type = "video";
-     } else if (["pdf", "txt", "doc", "zip"].includes(extension)) {
-        type = "raw";
-     }
+        // Extract public ID from URL
+        const parts = url.split("/");
+        const filename = parts.pop(); // last segment
+        const [publicId, extension] = filename.split(".");
 
-     //delete the resource 
-     const response = await cloudinary.uploader.destroy(publicId, {
-        resource_type: type
-     });
+        // Determine resource type
+        let type = "image";
+        if (["mp4", "mov", "avi"].includes(extension)) type = "video";
+        if (["pdf", "txt", "doc", "zip"].includes(extension)) type = "raw";
 
-     if(response.result === "ok") {
-        console.log(`Resource successfully deleted: ${publicId}`);
-     } else {
-        console.log(`Failed to delete rsource: ${response}`)
-     }
-     return response;
+        // Delete resource
+        const response = await cloudinary.uploader.destroy(publicId, {
+            resource_type: type,
+        });
 
-   } catch (error) {
-     console.error("Error deleting resource on cloudinary: ", error.message);
-     return null;
-   }
-}
-export { 
-    uploadOnCloudinary,
-    deleteResourceOnCloudinary,
- }
+        if (response.result === "ok") {
+            console.log(`Deleted Cloudinary resource: ${publicId}`);
+        } else {
+            console.log(`Failed to delete resource:`, response);
+        }
+
+        return response;
+
+    } catch (error) {
+        console.error("Cloudinary delete error:", error.message);
+        return null;
+    }
+};
